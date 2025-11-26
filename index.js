@@ -18,7 +18,11 @@ const reviewRoutes = require('./routes/reviews');
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+  })
+);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -30,7 +34,7 @@ app.use('/api/', limiter);
 
 // CORS configuration
 const allowedOrigins = [
-  "https://eventapp-virid.vercel.app/",
+  "https://eventapp-virid.vercel.app",
   "http://localhost:5173"
 ];
 
