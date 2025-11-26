@@ -16,9 +16,10 @@ const eventManagerSchema = new mongoose.Schema({
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
   phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    match: [/^\+?[1-9]\d{1,14}$/, 'Please enter a valid phone number']
+     type: String,
+  required: [true, 'Phone number is required'],
+  unique: true,
+  match: [/^\+?[1-9]\d{1,14}$/, 'Please enter a valid phone number']
   },
   password: {
     type: String,
@@ -37,7 +38,10 @@ const eventManagerSchema = new mongoose.Schema({
   },
   aadharNumber: {
     type: String,
-    default: null
+  minlength: [12, 'Aadhaar must be 12 digits'],
+  maxlength: [12, 'Aadhaar must be 12 digits'],
+  match: [/^\d{12}$/, 'Please enter a valid Aadhaar number'],
+  default: null
   },
   verifiedName: {
     type: String,

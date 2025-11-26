@@ -1,24 +1,21 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const router = express.Router();
 const Availability = require('../models/Availability');
 const Booking = require('../models/Booking');
 const auth = require('../middleware/auth');
 
-const router = express.Router();
-
-// @route   GET /api/availability
-// @desc    Get availability for authenticated user
-// @access  Private
+// Get all availability for a manager
 router.get('/', auth, async (req, res) => {
   try {
     const { month, year } = req.query;
-    
-    let query = { managerId: req.user._id };
-    
+    const managerId = req.user.id;
+
+    let query = { managerId };
+
+    // Filter by month and year if provided
     if (month && year) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0);
-      
       query.date = {
         $gte: startDate,
         $lte: endDate
@@ -26,96 +23,160 @@ router.get('/', auth, async (req, res) => {
     }
 
     const availability = await Availability.find(query)
-      .populate('timeSlots.bookingId', 'customerName eventType')
+      .populate('timeSlots.bookingId')
       .sort({ date: 1 });
 
     res.json({
       success: true,
       availability
     });
-
   } catch (error) {
     console.error('Get availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to fetch availability'
     });
   }
 });
 
-// @route   GET /api/availability/:date
-// @desc    Get availability for specific date
-// @access  Private
+// Get availability for specific date
 router.get('/:date', auth, async (req, res) => {
   try {
-    const date = new Date(req.params.date);
-    
+    const { date } = req.params;
+    const managerId = req.user.id;
+
     const availability = await Availability.findOne({
-      managerId: req.user._id,
-      date: {
-        $gte: new Date(date.setHours(0, 0, 0, 0)),
-        $lt: new Date(date.setHours(23, 59, 59, 999))
-      }
-    }).populate('timeSlots.bookingId', 'customerName eventType');
+      managerId,
+      date: new Date(date)
+    }).populate('timeSlots.bookingId');
 
     res.json({
       success: true,
       availability
     });
-
   } catch (error) {
     console.error('Get date availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to fetch availability for date'
     });
   }
 });
 
-// @route   POST /api/availability
-// @desc    Set availability for a date
-// @access  Private
-router.post('/', auth, [
-  body('date').isISO8601().withMessage('Please enter a valid date'),
-  body('isFullDay').isBoolean().withMessage('isFullDay must be a boolean'),
-  body('status').isIn(['available', 'unavailable']).withMessage('Invalid status'),
-  body('timeSlots').optional().isArray().withMessage('Time slots must be an array')
-], async (req, res) => {
+// Set availability
+router.post('/', auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { 
+      date, 
+      timeSlots = [], 
+      isFullDay = false, 
+      status = 'available', 
+      weekendAvailability = { saturday: true, sunday: true }, 
+      notes = '',
+      setAllWeekends = false 
+    } = req.body;
+    const managerId = req.user.id;
+
+    // Check if it's the 1st day of the month
+    const targetDate = new Date(date);
+    if (targetDate.getDate() === 1) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: 'Cannot set availability for the 1st day of the month'
       });
     }
 
-    const { date, isFullDay, status, timeSlots = [] } = req.body;
-    const availabilityDate = new Date(date);
+    // Handle setting all weekends in a month
+    if (setAllWeekends) {
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      const weekendDates = [];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDate = new Date(year, month, day);
+        const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+        const isFirstDay = currentDate.getDate() === 1;
+        
+        if (isWeekend && !isFirstDay) {
+          weekendDates.push(currentDate);
+        }
+      }
+      
+      // Set availability for all weekend dates
+      const results = [];
+      for (const weekendDate of weekendDates) {
+        let availability = await Availability.findOne({
+          managerId,
+          date: weekendDate
+        });
+
+        const weekendAvail = {
+          saturday: weekendDate.getDay() === 6,
+          sunday: weekendDate.getDay() === 0
+        };
+
+        if (availability) {
+          availability.timeSlots = timeSlots.length > 0 ? timeSlots : [{
+            startTime: '00:00',
+            endTime: '23:59',
+            status: 'available'
+          }];
+          availability.isFullDay = isFullDay;
+          availability.status = status;
+          availability.weekendAvailability = weekendAvail;
+          availability.notes = notes;
+        } else {
+          availability = new Availability({
+            managerId,
+            date: weekendDate,
+            timeSlots: timeSlots.length > 0 ? timeSlots : [{
+              startTime: '00:00',
+              endTime: '23:59',
+              status: 'available'
+            }],
+            isFullDay: isFullDay,
+            status,
+            weekendAvailability: weekendAvail,
+            notes
+          });
+        }
+
+        await availability.save();
+        results.push(availability);
+      }
+      
+      return res.json({
+        success: true,
+        availability: results,
+        message: `Weekend availability set for ${results.length} dates`
+      });
+    }
 
     // Check if availability already exists for this date
     let availability = await Availability.findOne({
-      managerId: req.user._id,
-      date: {
-        $gte: new Date(availabilityDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(availabilityDate.setHours(23, 59, 59, 999))
-      }
+      managerId,
+      date: targetDate
     });
 
     if (availability) {
       // Update existing availability
+      availability.timeSlots = timeSlots;
       availability.isFullDay = isFullDay;
       availability.status = status;
-      availability.timeSlots = timeSlots;
+      availability.weekendAvailability = weekendAvailability;
+      availability.notes = notes;
     } else {
       // Create new availability
       availability = new Availability({
-        managerId: req.user._id,
-        date: new Date(date),
+        managerId,
+        date: targetDate,
+        timeSlots,
         isFullDay,
         status,
-        timeSlots
+        weekendAvailability,
+        notes
       });
     }
 
@@ -123,40 +184,29 @@ router.post('/', auth, [
 
     res.json({
       success: true,
-      message: 'Availability updated successfully',
-      availability
+      availability,
+      message: 'Availability set successfully'
     });
-
   } catch (error) {
     console.error('Set availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during availability update'
+      message: 'Failed to set availability',
+      error: error.message
     });
   }
 });
 
-// @route   PUT /api/availability/:id
-// @desc    Update availability
-// @access  Private
-router.put('/:id', auth, [
-  body('isFullDay').optional().isBoolean().withMessage('isFullDay must be a boolean'),
-  body('status').optional().isIn(['available', 'unavailable', 'booked']).withMessage('Invalid status'),
-  body('timeSlots').optional().isArray().withMessage('Time slots must be an array')
-], async (req, res) => {
+// Update availability
+router.put('/:id', auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
+    const { id } = req.params;
+    const { timeSlots, isFullDay, status, weekendAvailability, notes } = req.body;
+    const managerId = req.user.id;
 
     const availability = await Availability.findOne({
-      _id: req.params.id,
-      managerId: req.user._id
+      _id: id,
+      managerId
     });
 
     if (!availability) {
@@ -166,37 +216,46 @@ router.put('/:id', auth, [
       });
     }
 
-    const { isFullDay, status, timeSlots } = req.body;
+    // Check if it's the 1st day of the month
+    if (availability.date.getDate() === 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot modify availability for the 1st day of the month'
+      });
+    }
 
+    // Update fields
+    if (timeSlots !== undefined) availability.timeSlots = timeSlots;
     if (isFullDay !== undefined) availability.isFullDay = isFullDay;
     if (status !== undefined) availability.status = status;
-    if (timeSlots !== undefined) availability.timeSlots = timeSlots;
+    if (weekendAvailability !== undefined) availability.weekendAvailability = weekendAvailability;
+    if (notes !== undefined) availability.notes = notes;
 
     await availability.save();
 
     res.json({
       success: true,
-      message: 'Availability updated successfully',
-      availability
+      availability,
+      message: 'Availability updated successfully'
     });
-
   } catch (error) {
     console.error('Update availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during availability update'
+      message: 'Failed to update availability'
     });
   }
 });
 
-// @route   DELETE /api/availability/:id
-// @desc    Delete availability
-// @access  Private
+// Delete availability
 router.delete('/:id', auth, async (req, res) => {
   try {
+    const { id } = req.params;
+    const managerId = req.user.id;
+
     const availability = await Availability.findOne({
-      _id: req.params.id,
-      managerId: req.user._id
+      _id: id,
+      managerId
     });
 
     if (!availability) {
@@ -206,163 +265,141 @@ router.delete('/:id', auth, async (req, res) => {
       });
     }
 
-    // Check if there are any bookings for this date
-    const bookingsExist = await Booking.findOne({
-      managerId: req.user._id,
-      date: {
-        $gte: new Date(availability.date.setHours(0, 0, 0, 0)),
-        $lt: new Date(availability.date.setHours(23, 59, 59, 999))
-      },
-      status: { $in: ['Confirmed', 'Pending'] }
-    });
-
-    if (bookingsExist) {
+    // Check if it's the 1st day of the month
+    if (availability.date.getDate() === 1) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot delete availability with existing bookings'
+        message: 'Cannot delete availability for the 1st day of the month'
       });
     }
 
-    await Availability.findByIdAndDelete(req.params.id);
+    await Availability.findByIdAndDelete(id);
 
     res.json({
       success: true,
       message: 'Availability deleted successfully'
     });
-
   } catch (error) {
     console.error('Delete availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during availability deletion'
+      message: 'Failed to delete availability'
     });
   }
 });
 
-// @route   GET /api/availability/calendar/:month/:year
-// @desc    Get calendar data for specific month
-// @access  Private
+// Get calendar data for a specific month
 router.get('/calendar/:month/:year', auth, async (req, res) => {
   try {
     const { month, year } = req.params;
+    const managerId = req.user.id;
+
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);
 
     // Get availability data
     const availability = await Availability.find({
-      managerId: req.user._id,
+      managerId,
       date: {
         $gte: startDate,
         $lte: endDate
       }
-    });
+    }).sort({ date: 1 });
 
     // Get bookings for the month
     const bookings = await Booking.find({
-      managerId: req.user._id,
+      managerId,
       date: {
         $gte: startDate,
         $lte: endDate
       },
-      status: { $in: ['Confirmed', 'Pending'] }
-    }).populate('serviceIds', 'title');
+      status: { $in: ['Pending', 'Confirmed'] }
+    }).sort({ date: 1 });
 
-    // Create calendar events
-    const calendarEvents = bookings.map(booking => ({
+    // Convert bookings to events
+    const events = bookings.map(booking => ({
       id: booking._id,
       title: `${booking.eventType} - ${booking.customerName}`,
+      customerName: booking.customerName,
       date: booking.date,
       time: booking.time,
-      type: 'booking',
-      bookingId: booking._id,
-      customerName: booking.customerName,
-      location: booking.location,
-      status: booking.status
+      status: booking.status,
+      totalAmount: booking.totalAmount,
+      location: booking.location
     }));
 
     res.json({
       success: true,
       availability,
-      events: calendarEvents
+      events,
+      message: 'Calendar data fetched successfully'
     });
-
   } catch (error) {
     console.error('Get calendar data error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to fetch calendar data'
     });
   }
 });
 
-// @route   POST /api/availability/check
-// @desc    Check availability for specific date and time
-// @access  Public
-router.post('/check', [
-  body('managerId').isMongoId().withMessage('Invalid manager ID'),
-  body('date').isISO8601().withMessage('Please enter a valid date'),
-  body('time').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s?(AM|PM)?$/i).withMessage('Please enter a valid time')
-], async (req, res) => {
+// Check availability for a specific date and time
+router.post('/check', auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
     const { managerId, date, time } = req.body;
-    const checkDate = new Date(date);
 
-    // Get availability for the date
     const availability = await Availability.findOne({
-      managerId,
-      date: {
-        $gte: new Date(checkDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(checkDate.setHours(23, 59, 59, 999))
-      }
+      managerId: managerId || req.user.id,
+      date: new Date(date)
     });
 
-    if (!availability || availability.status !== 'available') {
+    if (!availability) {
       return res.json({
         success: true,
         available: false,
-        message: 'Manager is not available on this date'
+        message: 'No availability set for this date'
       });
     }
 
-    // Check for existing bookings
-    const existingBooking = await Booking.findOne({
-      managerId,
-      date: {
-        $gte: new Date(checkDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(checkDate.setHours(23, 59, 59, 999))
-      },
-      status: { $in: ['Confirmed', 'Pending'] }
-    });
-
-    if (existingBooking) {
+    if (availability.status === 'unavailable') {
       return res.json({
         success: true,
         available: false,
-        message: 'Manager already has a booking on this date'
+        message: 'Date is marked as unavailable'
+      });
+    }
+
+    if (availability.isFullDay) {
+      return res.json({
+        success: true,
+        available: availability.status === 'available',
+        message: availability.status === 'available' ? 'Available full day' : 'Not available'
+      });
+    }
+
+    // Check specific time slots if time is provided
+    if (time && availability.timeSlots.length > 0) {
+      const timeSlot = availability.timeSlots.find(slot => 
+        slot.startTime <= time && slot.endTime >= time && slot.status === 'available'
+      );
+
+      return res.json({
+        success: true,
+        available: !!timeSlot,
+        message: timeSlot ? 'Time slot available' : 'Time slot not available'
       });
     }
 
     res.json({
       success: true,
-      available: true,
-      message: 'Manager is available',
+      available: availability.status === 'available',
       availability
     });
-
   } catch (error) {
     console.error('Check availability error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to check availability'
     });
   }
 });
