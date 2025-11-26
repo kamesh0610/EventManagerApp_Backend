@@ -18,7 +18,7 @@
   "author": "EventPro Team",
   "license": "MIT",
   "dependencies": {
-    "@vercel/node": "^5.3.13",
+    "@vercel/node": "^4.0.0",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "browser": "^0.2.6",
