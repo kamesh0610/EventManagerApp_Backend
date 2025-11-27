@@ -95,7 +95,13 @@ app.use((error, req, res, next) => {
       errors: Object.values(error.errors).map(err => err.message)
     });
   }
+const mongoose = require("mongoose");
 
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.log(err));
+  
   if (error.name === 'CastError') {
     return res.status(400).json({
       success: false,
