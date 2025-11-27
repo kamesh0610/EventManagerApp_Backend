@@ -21,12 +21,11 @@ const app = express();
 app.use(helmet());
 
 // Rate limiting
-const limiter = rateLimit({
+app.use('/api/', rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 1000,
   message: 'Too many requests from this IP, please try again later.'
-});
-app.use('/api/', limiter);
+}));
 
 // CORS configuration
 const allowedOrigins = [
@@ -56,7 +55,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// MongoDB connection
+// 🔥 MongoDB connection (only THIS one)
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -95,13 +94,7 @@ app.use((error, req, res, next) => {
       errors: Object.values(error.errors).map(err => err.message)
     });
   }
-const mongoose = require("mongoose");
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch((err) => console.log(err));
-  
   if (error.name === 'CastError') {
     return res.status(400).json({
       success: false,
@@ -130,8 +123,10 @@ app.use('*', (req, res) => {
   });
 });
 
-// ✅ Instead of app.listen, export the app for Vercel
+// Export app for Vercel
 module.exports = app;
+
+// Local server only
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => console.log(`🚀 Server running locally on port ${PORT}`));
