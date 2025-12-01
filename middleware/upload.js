@@ -2,40 +2,52 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    let uploadPath = uploadDir;
-    
-    // Create subdirectories based on file type
-    if (file.fieldname.includes('aadhar')) {
-      uploadPath = path.join(uploadDir, 'kyc');
-    } else if (file.fieldname === 'photo') {
-      uploadPath = path.join(uploadDir, 'profiles');
-    } else if (file.fieldname === 'image') {
-      uploadPath = path.join(uploadDir, 'services');
-    }
-    
-    // Ensure subdirectory exists
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+let storage;
+
+if (isProduction) {
+  // Use memory storage for Vercel (temporary - files stored in memory)
+  // NOTE: For production, you should migrate to cloud storage (Cloudinary, AWS S3, etc.)
+  storage = multer.memoryStorage();
+  console.warn('⚠️ Using memory storage. Files will not persist. Please configure cloud storage for production.');
+} else {
+  // Use disk storage for local development
+  const uploadDir = path.join(__dirname, '../uploads');
+  
+  // Ensure upload directory exists (local only)
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
   }
-});
+
+  storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      let uploadPath = uploadDir;
+      
+      // Create subdirectories based on file type
+      if (file.fieldname.includes('aadhar')) {
+        uploadPath = path.join(uploadDir, 'kyc');
+      } else if (file.fieldname === 'photo') {
+        uploadPath = path.join(uploadDir, 'profiles');
+      } else if (file.fieldname === 'image') {
+        uploadPath = path.join(uploadDir, 'services');
+      }
+      
+      // Ensure subdirectory exists
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+      
+      cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+      // Generate unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const extension = path.extname(file.originalname);
+      cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    }
+  });
+}
 
 // File filter
 const fileFilter = (req, file, cb) => {
