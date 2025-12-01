@@ -126,7 +126,7 @@ app.use('*', (req, res) => {
 
 // ✅ Instead of app.listen, export the app for Vercel
 module.exports = app;
-if (require.main === module) {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => console.log(`🚀 Server running locally on port ${PORT}`));
-}
+// if (require.main === module) {
+//   const PORT = process.env.PORT || 5000;
+//   app.listen(PORT, () => console.log(`🚀 Server running locally on port ${PORT}`));
+// }
