@@ -28,6 +28,7 @@
     "express-validator": "6.15.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mongodb": "^5.9.0",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
     "validator": "13.9.0"
