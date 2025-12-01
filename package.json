@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "jest"
+    "test": "jest",
+    "vercel-build": "npm install --legacy-peer-deps"
   },
   "keywords": [
     "eventpro",
