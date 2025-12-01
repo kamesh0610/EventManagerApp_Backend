@@ -7,13 +7,13 @@ const path = require('path');
 require('dotenv').config();
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const serviceRoutes = require('./routes/services');
-const bookingRoutes = require('./routes/bookings');
-const broadcastRoutes = require('./routes/broadcasts');
-const availabilityRoutes = require('./routes/availability');
-const reviewRoutes = require('./routes/reviews');
+const authRoutes = require('../routes/auth');
+const userRoutes = require('../routes/users');
+const serviceRoutes = require('../routes/services');
+const bookingRoutes = require('../routes/bookings');
+const broadcastRoutes = require('../routes/broadcasts');
+const availabilityRoutes = require('../routes/availability');
+const reviewRoutes = require('../routes/reviews');
 
 const app = express();
 
@@ -125,11 +125,7 @@ app.use('*', (req, res) => {
 });
 
 // ✅ Instead of app.listen, export the app for Vercel
-const serverless = require('@vercel/node');
-
-module.exports = (req, res) => {
-  return app(req, res);
-};
+module.exports = app;
 // if (require.main === module) {
 //   const PORT = process.env.PORT || 5000;
 //   app.listen(PORT, () => console.log(`🚀 Server running locally on port ${PORT}`));
