@@ -21,7 +21,6 @@
     "@vercel/node": "^4.0.0",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
-    "browser": "^0.2.6",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.21.2",
@@ -34,7 +33,7 @@
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.1.10"
   },
   "engines": {
     "node": ">=16.0.0"

@@ -13,6 +13,4 @@ yarn-error.log*
 uploads
 
 # vercel build cache
-.vercel
 
-.vercel
